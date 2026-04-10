@@ -24,15 +24,15 @@ export type OSINTMode = 'maltego' | 'epieos' | 'maigret' | 'googledorking';
 export async function gatherIntelligence(target: string, mode: OSINTMode = 'maltego', details?: any): Promise<OSINTGraph> {
 
   // 👉 call your backend instead of Gemini directly
-  const response = await fetch("/api/gemini", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      prompt: `Perform OSINT investigation on: ${target} using mode: ${mode}`
-    }),
-  });
+const response = await fetch("https://aegis-system.onrender.com/api/gemini", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    prompt: `Perform OSINT investigation on: ${target} using mode: ${mode}`
+  }),
+});
 
   if (!response.ok) {
     throw new Error("Failed to fetch Gemini response");
