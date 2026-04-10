@@ -4,18 +4,20 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 // Load env variables
 dotenv.config();
 
-// ✅ Gemini init
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+// ✅ Gemini init (NEW SDK)
+const genAI = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY!,
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Fix for fetch (important for Node < 18)
+// Fix for fetch (Node < 18 safe)
 import fetch from "node-fetch";
 
 const MAIGRET_SITES = [
@@ -27,7 +29,6 @@ const MAIGRET_SITES = [
 async function startServer() {
   try {
     const app = express();
-
     const PORT = process.env.PORT || 3000;
 
     app.use(cors());
@@ -48,6 +49,7 @@ async function startServer() {
         const results = await Promise.all(
           MAIGRET_SITES.map(async (site) => {
             const url = site.url.replace("{}", username);
+
             try {
               const response = await fetch(url);
 
@@ -74,6 +76,7 @@ async function startServer() {
           username,
           found: results.filter(Boolean),
         });
+
       } catch {
         res.status(500).json({ error: "Maigret failed" });
       }
@@ -93,26 +96,25 @@ async function startServer() {
         if (name) found.push({ type: "name", value: name });
 
         res.json({ found });
+
       } catch {
         res.status(500).json({ error: "Epieos failed" });
       }
     });
 
     // =========================
-    // GEMINI API ✅ NEW
+    // GEMINI API ✅ FIXED
     // =========================
     app.post("/api/gemini", async (req, res) => {
       try {
         const { prompt } = req.body;
 
-        const model = genAI.getGenerativeModel({
-          model: "gemini-pro",
+        const response = await genAI.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: prompt,
         });
 
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-
-        res.json({ data: text });
+        res.json({ data: response.text });
 
       } catch (error) {
         console.error("Gemini error:", error);
