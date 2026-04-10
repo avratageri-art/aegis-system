@@ -4,9 +4,13 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import { GoogleGenerativeAI } from "@google/genai";
 
 // Load env variables
 dotenv.config();
+
+// ✅ Gemini init
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,21 +22,18 @@ const MAIGRET_SITES = [
   { name: 'Instagram', url: 'https://www.instagram.com/{}', errorMsg: 'Page Not Found' },
   { name: 'Twitter', url: 'https://twitter.com/{}', errorMsg: 'This account doesn’t exist' },
   { name: 'GitHub', url: 'https://github.com/{}', errorMsg: '404' }
-  // (keep rest same)
 ];
 
 async function startServer() {
   try {
     const app = express();
 
-    // ✅ FIXED PORT
     const PORT = process.env.PORT || 3000;
 
-    // ✅ Middleware
     app.use(cors());
     app.use(express.json());
 
-    // ✅ Health check route
+    // ✅ Health check
     app.get("/", (req, res) => {
       res.send("Backend is running 🚀");
     });
@@ -73,7 +74,7 @@ async function startServer() {
           username,
           found: results.filter(Boolean),
         });
-      } catch (err) {
+      } catch {
         res.status(500).json({ error: "Maigret failed" });
       }
     });
@@ -87,21 +88,35 @@ async function startServer() {
 
         const found: any[] = [];
 
-        if (email) {
-          found.push({ type: "email", value: email });
-        }
-
-        if (phone) {
-          found.push({ type: "phone", value: phone });
-        }
-
-        if (name) {
-          found.push({ type: "name", value: name });
-        }
+        if (email) found.push({ type: "email", value: email });
+        if (phone) found.push({ type: "phone", value: phone });
+        if (name) found.push({ type: "name", value: name });
 
         res.json({ found });
-      } catch (err) {
+      } catch {
         res.status(500).json({ error: "Epieos failed" });
+      }
+    });
+
+    // =========================
+    // GEMINI API ✅ NEW
+    // =========================
+    app.post("/api/gemini", async (req, res) => {
+      try {
+        const { prompt } = req.body;
+
+        const model = genAI.getGenerativeModel({
+          model: "gemini-pro",
+        });
+
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+
+        res.json({ data: text });
+
+      } catch (error) {
+        console.error("Gemini error:", error);
+        res.status(500).json({ error: "Gemini failed" });
       }
     });
 
@@ -124,7 +139,7 @@ async function startServer() {
       });
     }
 
-    // ✅ START SERVER
+    // ✅ Start server
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`✅ Server running on port ${PORT}`);
     });
@@ -134,5 +149,4 @@ async function startServer() {
   }
 }
 
-// ✅ START FUNCTION
 startServer();
