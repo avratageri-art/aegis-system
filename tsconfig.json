@@ -11,4 +11,3 @@
   "include": ["server.ts"],
   "exclude": ["node_modules", "src", "components"]
 }
-}
