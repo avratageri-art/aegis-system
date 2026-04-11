@@ -1,154 +1,140 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { createServer as createViteServer } from "vite";
-import path from "path";
-import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
-
-// Load env variables
-dotenv.config();
-
-// ✅ Gemini init (NEW SDK)
-const genAI = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY!,
-});
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Fix for fetch (Node < 18 safe)
 import fetch from "node-fetch";
 
+dotenv.config();
+
+const app = express();
+
+// ✅ SAFE PORT FIX
+const PORT = Number(process.env.PORT) || 3000;
+
+// ✅ CHECK API KEY
+if (!process.env.GEMINI_API_KEY) {
+  console.error("❌ GEMINI_API_KEY is missing");
+  process.exit(1);
+}
+
+// ✅ Gemini setup
+const genAI = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
+
+app.use(cors());
+app.use(express.json());
+
+// =========================
+// ROOT
+// =========================
+app.get("/", (req, res) => {
+  res.send("Backend is running 🚀");
+});
+
+// =========================
+// MAIGRET API
+// =========================
 const MAIGRET_SITES = [
-  { name: 'Instagram', url: 'https://www.instagram.com/{}', errorMsg: 'Page Not Found' },
-  { name: 'Twitter', url: 'https://twitter.com/{}', errorMsg: 'This account doesn’t exist' },
-  { name: 'GitHub', url: 'https://github.com/{}', errorMsg: '404' }
+  { name: "Instagram", url: "https://www.instagram.com/{}", errorMsg: "Page Not Found" },
+  { name: "Twitter", url: "https://twitter.com/{}", errorMsg: "This account doesn’t exist" },
+  { name: "GitHub", url: "https://github.com/{}", errorMsg: "404" }
 ];
 
-async function startServer() {
+app.get("/api/maigret/:username", async (req, res) => {
   try {
-    const app = express();
-    const PORT = Number(process.env.PORT) || 3000;
+    const { username } = req.params;
 
-    app.use(cors());
-    app.use(express.json());
+    const results = await Promise.all(
+      MAIGRET_SITES.map(async (site) => {
+        const url = site.url.replace("{}", username);
 
-    // ✅ Health check
-    app.get("/", (req, res) => {
-      res.send("Backend is running 🚀");
-    });
+        try {
+          const response = await fetch(url);
 
-    // =========================
-    // MAIGRET API
-    // =========================
-    app.get("/api/maigret/:username", async (req, res) => {
-      try {
-        const { username } = req.params;
+          if (response.status !== 200) return null;
 
-        const results = await Promise.all(
-          MAIGRET_SITES.map(async (site) => {
-            const url = site.url.replace("{}", username);
+          const text = await response.text();
 
-            try {
-              const response = await fetch(url);
+          if (text.toLowerCase().includes(site.errorMsg.toLowerCase())) {
+            return null;
+          }
 
-              if (response.status !== 200) return null;
+          return {
+            platform: site.name,
+            url,
+            status: "found",
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
 
-              const text = await response.text();
-
-              if (text.toLowerCase().includes(site.errorMsg.toLowerCase())) {
-                return null;
-              }
-
-              return {
-                platform: site.name,
-                url,
-                status: "found",
-              };
-            } catch {
-              return null;
-            }
-          })
-        );
-
-        res.json({
-          username,
-          found: results.filter(Boolean),
-        });
-
-      } catch {
-        res.status(500).json({ error: "Maigret failed" });
-      }
-    });
-
-    // =========================
-    // EPIEOS API
-    // =========================
-    app.get("/api/epieos", async (req, res) => {
-      try {
-        const { email, phone, name } = req.query;
-
-        const found: any[] = [];
-
-        if (email) found.push({ type: "email", value: email });
-        if (phone) found.push({ type: "phone", value: phone });
-        if (name) found.push({ type: "name", value: name });
-
-        res.json({ found });
-
-      } catch {
-        res.status(500).json({ error: "Epieos failed" });
-      }
-    });
-
-    // =========================
-    // GEMINI API ✅ FIXED
-    // =========================
-    app.post("/api/gemini", async (req, res) => {
-      try {
-        const { prompt } = req.body;
-
-        const response = await genAI.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: prompt,
-        });
-
-        res.json({ data: response.text });
-
-      } catch (error) {
-        console.error("Gemini error:", error);
-        res.status(500).json({ error: "Gemini failed" });
-      }
-    });
-
-    // =========================
-    // VITE HANDLING
-    // =========================
-    if (process.env.NODE_ENV !== "production") {
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
-    } else {
-      const distPath = path.join(process.cwd(), "dist");
-
-      app.use(express.static(distPath));
-
-      app.get("*", (req, res) => {
-        res.sendFile(path.join(distPath, "index.html"));
-      });
-    }
-
-    // ✅ Start server
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`✅ Server running on port ${PORT}`);
+    res.json({
+      username,
+      found: results.filter(Boolean),
     });
 
   } catch (error) {
-    console.error("❌ Server failed to start:", error);
+    res.status(500).json({ error: "Maigret failed" });
   }
-}
+});
 
-startServer();
+// =========================
+// EPIEOS API
+// =========================
+app.get("/api/epieos", async (req, res) => {
+  try {
+    const { email, phone, name } = req.query;
+
+    const found: any[] = [];
+
+    if (email) found.push({ type: "email", value: email });
+    if (phone) found.push({ type: "phone", value: phone });
+    if (name) found.push({ type: "name", value: name });
+
+    res.json({ found });
+
+  } catch {
+    res.status(500).json({ error: "Epieos failed" });
+  }
+});
+
+// =========================
+// GEMINI API
+// =========================
+app.post("/api/gemini", async (req, res) => {
+  try {
+    const { prompt } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
+
+    const response = await genAI.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: prompt,
+    });
+
+    res.json({ data: response.text });
+
+  } catch (error) {
+    console.error("Gemini error:", error);
+    res.status(500).json({ error: "Gemini failed" });
+  }
+});
+
+// =========================
+// FALLBACK (IMPORTANT)
+// =========================
+app.get("*", (req, res) => {
+  res.send("Backend is running 🚀");
+});
+
+// =========================
+// START SERVER
+// =========================
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
