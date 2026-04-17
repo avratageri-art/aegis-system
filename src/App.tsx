@@ -7,7 +7,7 @@ import React, { useState, useCallback } from 'react';
 import { SearchPanel, OSINT_TOOLS } from './components/SearchPanel';
 import { GraphView } from './components/GraphView';
 import { DetailsPanel } from './components/DetailsPanel';
-import { OSINTGraph, OSINTNode, OSINTMode, gatherIntelligence } from './services/geminiService';
+import { OSINTGraph, OSINTNode, OSINTMode, gatherIntelligence, gatherUnifiedIntelligence } from './services/geminiService';
 import { Shield, Activity, Database, Settings, Menu, X, Terminal, ExternalLink, Download, FileText, Cpu, Globe, Zap, AlertTriangle, ArrowRight } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { TooltipProvider } from './components/ui/tooltip';
@@ -246,53 +246,65 @@ export default function App() {
     setAllResults({});
     setSelectedNode(null);
     setCurrentMode(mode);
-    addLog(`Initializing ${mode.toUpperCase()} engine...`);
+    addLog(`Initializing AEGIS Intelligence Protocol...`);
     addLog(`Target identified: ${target}`);
     
-    const modes: OSINTMode[] = ['maltego', 'epieos', 'maigret', 'googledorking'];
-    
     try {
-      addLog(`Executing parallel intelligence gathering across all nodes...`);
+      addLog(`Executing multi-vector intelligence gathering...`);
       
-      const promises = modes.map(async (m) => {
+      // Define all modes to scan
+      const modes: OSINTMode[] = ['maltego', 'epieos', 'maigret', 'googledorking'];
+      
+      // Prioritize the current mode
+      const prioritizedModes = [mode, ...modes.filter(m => m !== mode)];
+      
+      for (const m of prioritizedModes) {
+        addLog(`[${m.toUpperCase()}] Engaging specialized AI engine...`);
         try {
-          addLog(`[${m.toUpperCase()}] Engine engaged...`);
           const result = await gatherIntelligence(target, m, details);
-          return { mode: m, result };
-        } catch (err) {
-          console.error(`Engine ${m} failed:`, err);
-          addLog(`[${m.toUpperCase()}] Engine failed.`);
-          return { mode: m, result: { nodes: [], links: [], intelligenceLogs: [`Error: ${m} engine failed.`] } };
-        }
-      });
+          
+          setAllResults(prev => ({
+            ...prev,
+            [m]: result
+          }));
+          
+          addLog(`[${m.toUpperCase()}] Engine scan complete. Found ${result.nodes.length} nodes.`);
+          if (result.intelligenceLogs) {
+            result.intelligenceLogs.forEach(log => addLog(`[${m.toUpperCase()}] ${log}`));
+          }
+          
+          // If this was the first mode, select the first node
+          if (m === mode && result.nodes.length > 0) {
+            setSelectedNode(result.nodes[0]);
+          }
 
-      const resultsArray = await Promise.all(promises);
-      const newResults: Partial<Record<OSINTMode, OSINTGraph>> = {};
-      
-      resultsArray.forEach(({ mode: m, result }) => {
-        newResults[m] = result;
-        if (result.intelligenceLogs) {
-          result.intelligenceLogs.forEach(log => addLog(`[${m.toUpperCase()}] ${log}`));
+          // Add a small delay between engines to prevent quota exhaustion
+          if (m !== prioritizedModes[prioritizedModes.length - 1]) {
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          }
+        } catch (engineError: any) {
+          console.error(`Engine ${m} failed:`, engineError);
+          addLog(`[${m.toUpperCase()}] Engine failed: ${engineError.message || 'Unknown error'}`);
+          
+          // Fallback node for failed engine
+          setAllResults(prev => ({
+            ...prev,
+            [m]: { nodes: [{ id: target, label: target, type: 'person' }], links: [] }
+          }));
         }
-      });
-
-      setAllResults(newResults);
-      
-      const currentResult = newResults[mode];
-      if (currentResult && currentResult.nodes.length > 0) {
-        setSelectedNode(currentResult.nodes[0]);
-        addLog(`SUCCESS: Multi-engine scan complete.`);
-        toast.success(`Investigation complete. All tools ready.`);
-      } else {
-        toast.warning("Investigation complete, but some engines returned no data.");
       }
+      
+      addLog(`SUCCESS: Multi-engine scan complete. All intelligence nodes synchronized.`);
+      toast.success(`Investigation complete. All tools ready.`);
+
     } catch (error: any) {
-      addLog(`CRITICAL ERROR: Multi-engine investigation failed.`);
+      addLog(`CRITICAL ERROR: Intelligence gathering failed.`);
       console.error("Investigation failed", error);
       
       const errorMsg = error?.message || "";
       if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
         toast.error("API Quota exceeded. Please wait a minute before trying again.");
+        addLog("SYSTEM: API Quota exceeded. Nexus Engine throttled.");
       } else {
         toast.error("Investigation failed. Please check your connection.");
       }

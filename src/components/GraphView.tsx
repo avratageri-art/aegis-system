@@ -93,8 +93,36 @@ export const GraphView: React.FC<GraphViewProps> = ({ data, onNodeClick, selecte
           node.fx = node.x;
           node.fy = node.y;
         }}
-        linkColor={() => 'rgba(255, 255, 255, 0.1)'}
-        linkWidth={1}
+        linkColor={(link: any) => {
+          const sourceNode = data.nodes.find(n => n.id === (typeof link.source === 'object' ? link.source.id : link.source));
+          const color = sourceNode ? (TYPE_COLORS[sourceNode.type] || '#94a3b8') : '#94a3b8';
+          return color + '80'; // 50% opacity of the source node's color
+        }}
+        linkWidth={1.5}
+        linkDirectionalParticles={2}
+        linkDirectionalParticleWidth={2}
+        linkDirectionalParticleSpeed={0.005}
+        linkCanvasObjectMode={() => 'after'}
+        linkCanvasObject={(link: any, ctx, globalScale) => {
+          const label = link.label;
+          if (!label) return;
+
+          const start = link.source;
+          const end = link.target;
+          if (typeof start !== 'object' || typeof end !== 'object') return;
+
+          const textPos = {
+            x: start.x + (end.x - start.x) / 2,
+            y: start.y + (end.y - start.y) / 2
+          };
+
+          const fontSize = Math.max(8 / globalScale, 1);
+          ctx.font = `${fontSize}px "JetBrains Mono"`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.fillText(label, textPos.x, textPos.y);
+        }}
         backgroundColor="rgba(0,0,0,0)"
         nodeCanvasObject={(node: any, ctx, globalScale) => {
           const type = (node.type || '').toLowerCase();

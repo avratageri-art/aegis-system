@@ -1,7 +1,10 @@
+// Frontend service — calls server-side API routes instead of Gemini directly.
+// The API key and all AI logic live on the server.
+
 export interface OSINTNode {
   id: string;
   label: string;
-  type: 'person' | 'domain' | 'ip' | 'email' | 'organization' | 'alias' | 'phone' | 'social' | 'document';
+  type: 'person' | 'domain' | 'ip' | 'email' | 'organization' | 'alias' | 'phone' | 'social' | 'document' | 'breach';
   data?: any;
   color?: string;
 }
@@ -20,25 +23,39 @@ export interface OSINTGraph {
 
 export type OSINTMode = 'maltego' | 'epieos' | 'maigret' | 'googledorking';
 
-// ✅ MAIN FUNCTION
-export async function gatherIntelligence(target: string, mode: OSINTMode = 'maltego', details?: any): Promise<OSINTGraph> {
+export async function gatherUnifiedIntelligence(target: string, details?: any): Promise<Record<OSINTMode, OSINTGraph>> {
+  console.log(`[Nexus OSINT] Requesting Unified Investigation | Target: ${target}`);
 
-  // 👉 call your backend instead of Gemini directly
-const response = await fetch("https://aegis-system.onrender.com/api/gemini", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    prompt: `Perform OSINT investigation on: ${target} using mode: ${mode}`
-  }),
-});
+  const response = await fetch('/api/intelligence/unified', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, details })
+  });
 
   if (!response.ok) {
-    throw new Error("Failed to fetch Gemini response");
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || `Server error: ${response.status}`);
   }
 
-  const data = await response.json();
+  return response.json();
+}
 
-  return data.data; // comes from backend
+export async function gatherIntelligence(target: string, mode: OSINTMode = 'maltego', details?: any): Promise<OSINTGraph> {
+  console.log(`[Nexus OSINT] Requesting investigation | Mode: ${mode} | Target: ${target}`);
+
+  const response = await fetch('/api/intelligence', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, mode, details })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || `Server error: ${response.status}`);
+  }
+
+  const result = await response.json();
+
+  console.log(`[Nexus OSINT] Received ${result.nodes?.length || 0} nodes and ${result.links?.length || 0} links`);
+  return result;
 }
