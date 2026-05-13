@@ -43,7 +43,8 @@ export async function gatherIntelligence(target: string, mode: OSINTMode = 'malt
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
       
-      const response = await fetch(`/api/maigret/${encodeURIComponent(username)}`, { signal: controller.signal });
+      const apiBase = (import.meta.env.VITE_API_BASE_URL as string) || '';
+      const response = await fetch(`${apiBase}/api/maigret/${encodeURIComponent(username)}`, { signal: controller.signal });
       clearTimeout(timeoutId);
       
       if (response.ok) {
@@ -66,7 +67,8 @@ export async function gatherIntelligence(target: string, mode: OSINTMode = 'malt
       if (phoneTarget) queryParams.append('phone', phoneTarget);
       if (nameTarget) queryParams.append('name', nameTarget);
       
-      const response = await fetch(`/api/epieos?${queryParams.toString()}`);
+      const apiBase = (import.meta.env.VITE_API_BASE_URL as string) || '';
+      const response = await fetch(`${apiBase}/api/epieos?${queryParams.toString()}`);
       if (response.ok) {
         const data = await response.json();
         localEpieosResults = data.found || [];
